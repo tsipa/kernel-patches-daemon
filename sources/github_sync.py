@@ -11,6 +11,13 @@ import hashlib
 import copy
 
 
+logging.basicConfig(
+    format='%(asctime)s %(levelname)-8s %(message)s',
+    level=logging.INFO,
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
+
 class GithubSync(object):
     def __init__(
         self,
@@ -234,7 +241,7 @@ class GithubSync(object):
             fname = f.name
             f.close()
             try:
-                self.local_repo.git.apply([fname])
+                self.local_repo.git.apply(["-3", fname])
                 author = diff["submitter"]["name"]
                 email = diff["submitter"]["email"]
                 content = diff["content"]

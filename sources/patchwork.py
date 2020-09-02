@@ -20,8 +20,8 @@ RELEVANT_STATES = {
 RELEVANT_STATE_IDS = [RELEVANT_STATES[x] for x in RELEVANT_STATES]
 # with these tags will be closed if no updates within TTL
 TTL = {
-    "changes-requested": 86400,
-    "rfc": 86400
+    "changes-requested": 3600,
+    "rfc": 3600
 }
 
 # when we don't interested in this patch anymore
@@ -31,6 +31,12 @@ IRRELEVANT_STATES = {
     "not-applicable": 6,
     "superseded": 9,
 }
+
+logging.basicConfig(
+    format='%(asctime)s %(levelname)-8s %(message)s',
+    level=logging.INFO,
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
 
 
 class Subject(object):
@@ -82,7 +88,7 @@ class Series(object):
         for key in data:
             setattr(self, key, data[key])
         self.subject = re.match(self._subject_regexp, data["name"]).group("name")
-        self.ignore_tags = re.compile(r"([0-9]+/[0-9]+|[vV][0-9]+)")
+        self.ignore_tags = re.compile(r"([0-9]+/[0-9]+|V[0-9]+)|patch", re.IGNORECASE)
         self.tag_regexp = re.compile(r"^(\[(?P<tags>[^]]*)\])*")
 
     @property
@@ -156,7 +162,7 @@ class Series(object):
         for diff in self.diffs:
             if diff["state"] in TTL:
                 d_date = datetime.datetime.strptime(diff["date"], "%Y-%m-%dT%H:%M:%S")
-                if (now - d_date).seconds >= TTL[diff["state"]]:
+                if (now - d_date).total_seconds() >= TTL[diff["state"]]:
                     return True
         return False
 
