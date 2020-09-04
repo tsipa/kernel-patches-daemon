@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import json
 from github_sync import GithubSync
-from github import Github
+from github import Github, GithubException
 
 import os
 import time
@@ -36,8 +36,14 @@ class PWDaemon(object):
                 self.workers.append(worker)
                 if labels_cfg:
                     git = Github(self.config[project]["github_oauth_token"])
-                    user = git.get_user()
-                    repo = user.get_repo(os.path.basename(project))
+                    repo_name = os.path.basename(project)
+                    try:
+                        user = git.get_user()
+                        repo = user.get_repo(repo_name)
+                    except GithubException:
+                        org = os.path.split(project)[0].split(":")[-1]
+                        repo = git.get_organization(org).get_repo(repo_name)
+
                     self.color_labels(repo)
 
     def color_labels(self, repo):

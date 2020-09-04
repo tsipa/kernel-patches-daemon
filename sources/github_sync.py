@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from patchwork import Patchwork, Series, Subject
-from github import Github
+from github import Github, GithubException
 import git
 import re
 import tempfile
@@ -50,7 +50,15 @@ class GithubSync(object):
         )
         self.user = self.git.get_user()
         self.user_login = self.user.login
-        self.repo = self.user.get_repo(self.repo_name)
+        try:
+            self.repo = self.user.get_repo(self.repo_name)
+        except GithubException:
+            # are we working under org repo?
+            org = os.path.split(repo_url)[0].split(":")[-1]
+            self.user_login = org
+            self.repo = self.git.get_organization(org).get_repo(self.repo_name)
+
+
         self.branches = [x for x in self.repo.get_branches()]
         self.merge_conflict_label = merge_conflict_label
         # self.master = self.repo.get_branch(master)
@@ -162,6 +170,7 @@ class GithubSync(object):
         if title in self.prs:
             pr = self.prs[title]
         elif can_create:
+            self.logger.info(f"Creating PR for '{series.subject}' with {series.age} delay")
             if flag:
                 self._create_dummy_commit(branch_name)
             body = (

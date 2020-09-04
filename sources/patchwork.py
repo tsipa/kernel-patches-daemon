@@ -6,6 +6,9 @@ import re
 import logging
 import datetime
 import time
+import dateutil.parser as dp
+import pytz
+from tzlocal import get_localzone
 
 # when we want to push this patch through CI
 RELEVANT_STATES = {
@@ -158,13 +161,22 @@ class Series(object):
     @property
     def expired(self):
         now = datetime.datetime.now()
-
         for diff in self.diffs:
             if diff["state"] in TTL:
-                d_date = datetime.datetime.strptime(diff["date"], "%Y-%m-%dT%H:%M:%S")
-                if (now - d_date).total_seconds() >= TTL[diff["state"]]:
+                if self._get_age(diff["date"]) >= TTL[diff["state"]]:
                     return True
         return False
+
+    def _get_age(self, date):
+        now = datetime.datetime.now().astimezone(get_localzone())
+        d = dp.parse(date+"Z").astimezone(get_localzone())
+        return (now - d).total_seconds()
+
+    @property
+    def age(self):
+        return self._get_age(self.date)
+
+
 
 
 class Patchwork(object):
