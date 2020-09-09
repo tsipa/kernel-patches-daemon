@@ -12,9 +12,9 @@ import copy
 
 
 logging.basicConfig(
-    format='%(asctime)s %(levelname)-8s %(message)s',
+    format="%(asctime)s %(levelname)-8s %(message)s",
     level=logging.INFO,
-    datefmt='%Y-%m-%d %H:%M:%S'
+    datefmt="%Y-%m-%d %H:%M:%S",
 )
 
 
@@ -58,20 +58,13 @@ class GithubSync(object):
             self.user_login = org
             self.repo = self.git.get_organization(org).get_repo(self.repo_name)
 
-
         self.branches = [x for x in self.repo.get_branches()]
         self.merge_conflict_label = merge_conflict_label
         # self.master = self.repo.get_branch(master)
         self.logger = logging.getLogger(__name__)
         # self.repodir = tempfile.TemporaryDirectory()
         self.repodir = self._uniq_tmp_folder(repo_url, master)
-        self.subjects = {}
-        self.prs = {}
-        self.all_prs = {}
         self.pr_branch_regexp = re.compile("series/[0-9]+")
-        self.fetch_master()
-        self.get_pulls()
-        self.do_sync()
 
     def _uniq_tmp_folder(self, url, branch):
         # use same foder for multiple invocation to avoid cloning whole tree every time
@@ -170,7 +163,9 @@ class GithubSync(object):
         if title in self.prs:
             pr = self.prs[title]
         elif can_create:
-            self.logger.info(f"Creating PR for '{series.subject}' with {series.age} delay")
+            self.logger.info(
+                f"Creating PR for '{series.subject}' with {series.age} delay"
+            )
             if flag:
                 self._create_dummy_commit(branch_name)
             body = (
@@ -347,6 +342,15 @@ class GithubSync(object):
             version of series applies in the same branch
             as separate commit
         """
+
+        # sync mirror and fetch current states of PRs
+        self.subjects = {}
+        self.prs = {}
+        self.all_prs = {}
+        self.fetch_master()
+        self.get_pulls()
+        self.do_sync()
+
         self.subjects = self.pw.get_relevant_subjects()
         # fetch recent subjects
         for subject in self.subjects:

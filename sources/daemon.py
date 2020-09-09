@@ -47,13 +47,13 @@ class PWDaemon(object):
                     self.color_labels(repo)
 
     def color_labels(self, repo):
-        all_labels = { x.name.lower(): x for x in repo.get_labels() }
+        all_labels = {x.name.lower(): x for x in repo.get_labels()}
         for l in self.labels_cfg:
             label = l.lower()
             if label in all_labels:
                 if (
-                    all_labels[label].name != l or
-                    all_labels[label].color != self.labels_cfg[l]
+                    all_labels[label].name != l
+                    or all_labels[label].color != self.labels_cfg[l]
                 ):
                     all_labels[label].edit(name=l, color=self.labels_cfg[l])
             else:

@@ -22,10 +22,7 @@ RELEVANT_STATES = {
 }
 RELEVANT_STATE_IDS = [RELEVANT_STATES[x] for x in RELEVANT_STATES]
 # with these tags will be closed if no updates within TTL
-TTL = {
-    "changes-requested": 3600,
-    "rfc": 3600
-}
+TTL = {"changes-requested": 3600, "rfc": 3600}
 
 # when we don't interested in this patch anymore
 IRRELEVANT_STATES = {
@@ -36,9 +33,9 @@ IRRELEVANT_STATES = {
 }
 
 logging.basicConfig(
-    format='%(asctime)s %(levelname)-8s %(message)s',
+    format="%(asctime)s %(levelname)-8s %(message)s",
     level=logging.INFO,
-    datefmt='%Y-%m-%d %H:%M:%S'
+    datefmt="%Y-%m-%d %H:%M:%S",
 )
 
 
@@ -169,14 +166,12 @@ class Series(object):
 
     def _get_age(self, date):
         now = datetime.datetime.now().astimezone(get_localzone())
-        d = dp.parse(date+"Z").astimezone(get_localzone())
+        d = dp.parse(date + "Z").astimezone(get_localzone())
         return (now - d).total_seconds()
 
     @property
     def age(self):
         return self._get_age(self.date)
-
-
 
 
 class Patchwork(object):
