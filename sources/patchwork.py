@@ -245,7 +245,6 @@ class Patchwork(object):
 
     def get_relevant_subjects(self, full=True):
         subjects = {}
-        all_subjects = {}
         filtered_subjects = []
         for pattern in self.pw_search_patterns:
             p = {"since": self.since, "state": RELEVANT_STATE_IDS, "archived": False}
@@ -255,8 +254,12 @@ class Patchwork(object):
             for patch in all_patches:
                 patch_series = patch["series"]
                 for series in patch_series:
-                    s = Series(series, self)
-                    if s.subject not in all_subjects:
+                    if series["name"]:
+                        s = Series(series, self)
+                    else:
+                        self.logger.error(f"Malformed series: {series}")
+                        continue
+                    if s.subject not in subjects:
                         subjects[s.subject] = Subject(s.subject, self)
             for subject in subjects:
                 excluded_tags = subjects[subject].tags & self.filter_tags
