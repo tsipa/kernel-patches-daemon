@@ -91,24 +91,29 @@ class GithubSync(object):
         )
         self.master_sha = self.source_branch.object.hexsha
 
+    def fetch_repo(self, path, url):
+        def full_sync(path, url):
+            shutil.rmtree(path, ignore_errors=True)
+            return git.Repo.clone_from(url, path)
+
+        if os.path.exists(f"{path}/.git"):
+            repo = git.Repo.init(path)
+            try:
+                repo.git.fetch("-p", "origin")
+            except git.exc.GitCommandError as e:
+                # fall back to a full sync
+                repo = full_sync(path, url)
+        else:
+            repo = full_sync(path, url)
+        return repo
+
     def fetch_master(self):
         """
             Fetch master only once
         """
-        if os.path.exists(f"{self.repodir}/.git"):
-            self.local_repo = git.Repo.init(self.repodir)
-            self.local_repo.git.fetch("-p", "origin")
-        else:
-            shutil.rmtree(self.repodir, ignore_errors=True)
-            self.local_repo = git.Repo.clone_from(self.repo_url, self.repodir)
-        if self.ci_repo:
-            if os.path.exists(f"{self.ci_repo_dir}/.git"):
-                self.ci_local_repo = git.Repo.init(self.ci_repo_dir)
-                self.ci_local_repo.git.fetch("-p", "origin")
-            else:
-                shutil.rmtree(self.ci_repo_dir, ignore_errors=True)
-                self.ci_local_repo = git.Repo.clone_from(self.ci_repo, self.ci_repo_dir)
-            self.ci_local_repo.git.checkout(f"origin/{self.ci_branch}")
+        self.local_repo = self.fetch_repo(self.repodir, self.repo_url)
+        self.ci_local_repo = self.fetch_repo(self.ci_repo_dir, self.ci_repo)
+        self.ci_local_repo.git.checkout(f"origin/{self.ci_branch}")
 
     def _reset_repo(self):
         self.local_repo.git.reset("--hard", self.source_branch)

@@ -7,10 +7,12 @@ import os
 import time
 import sys
 import re
+import argparse
 
 
 class PWDaemon(object):
     def __init__(self, cfg, labels_cfg=None):
+
         with open(cfg) as f:
             self.config = json.load(f)
         if labels_cfg:
@@ -79,11 +81,28 @@ def purge(cfg):
                 repo.get_git_ref(f"heads/{branch_name.name}").delete()
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Starts kernel-patches daemon")
+    parser.add_argument(
+        "--config",
+        default="~/.kernel-patches/config.json",
+        help="Specify config location",
+    )
+    parser.add_argument(
+        "--label-colors",
+        default="~/.kernel-patches/labels.json",
+        help="Specify label coloring config location.",
+    )
+    args = parser.parse_args()
+    return args
+
+
 if __name__ == "__main__":
     if "purge" in sys.argv:
         purge(cfg=f"{os.path.dirname(__file__)}/config.json")
     else:
-        cfg = f"{os.path.dirname(__file__)}/config.json"
-        labels = f"{os.path.dirname(__file__)}/labels.json"
+        args = parse_args()
+        cfg = os.path.expanduser(args.config)
+        labels = os.path.expanduser(args.label_colors)
         d = PWDaemon(cfg=cfg, labels_cfg=labels)
         d.loop()
