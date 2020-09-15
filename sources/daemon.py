@@ -2,6 +2,7 @@
 import json
 from github_sync import GithubSync
 from github import Github, GithubException
+from subprocess import Popen, PIPE, STDOUT
 
 import os
 import time
@@ -11,7 +12,7 @@ import argparse
 
 
 class PWDaemon(object):
-    def __init__(self, cfg, labels_cfg=None):
+    def __init__(self, cfg, labels_cfg=None, logger=None):
 
         with open(cfg) as f:
             self.config = json.load(f)
@@ -19,6 +20,7 @@ class PWDaemon(object):
             with open(labels_cfg) as f:
                 self.labels_cfg = json.load(f)
         self.workers = []
+        self.logger = logger
         for project in self.config.keys():
             for branch in self.config[project]["branches"].keys():
                 worker_cfg = self.config[project]["branches"][branch]
@@ -61,10 +63,24 @@ class PWDaemon(object):
             else:
                 repo.create_label(name=l, color=self.labels_cfg[l])
 
+    def process_stats(self, worker, logger=None):
+        if logger and os.path.isfile(logger) and os.access(logger, os.X_OK):
+            metrics = {
+                "int": {"time": time.time(),},
+                "normal": {"project": worker.repo_url, "branch": worker.master,},
+            }
+            for s in worker.stats:
+                metrics["int"][s] = worker.stats[s]
+
+            worker.repo_url
+            p = Popen([logger], stdout=PIPE, stdin=PIPE, stderr=PIPE)
+            stdout_data = p.communicate(input=json.dumps(metrics).encode())
+
     def loop(self):
         while True:
             for worker in self.workers:
                 worker.sync_branches()
+                self.process_stats(worker, self.logger)
             time.sleep(300)
 
 
@@ -93,6 +109,11 @@ def parse_args():
         default="~/.kernel-patches/labels.json",
         help="Specify label coloring config location.",
     )
+    parser.add_argument(
+        "--metric-logger",
+        default="~/.kernel-patches/logger.sh",
+        help="Specify external scripts which stdin will be fed with metrics",
+    )
     args = parser.parse_args()
     return args
 
@@ -104,5 +125,6 @@ if __name__ == "__main__":
         args = parse_args()
         cfg = os.path.expanduser(args.config)
         labels = os.path.expanduser(args.label_colors)
-        d = PWDaemon(cfg=cfg, labels_cfg=labels)
+        logger = os.path.expanduser(args.metric_logger)
+        d = PWDaemon(cfg=cfg, labels_cfg=labels, logger=logger)
         d.loop()

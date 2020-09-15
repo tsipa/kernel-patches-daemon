@@ -9,7 +9,7 @@ import os
 import logging
 import hashlib
 import copy
-
+import time
 
 logging.basicConfig(
     format="%(asctime)s %(levelname)-8s %(message)s",
@@ -19,6 +19,44 @@ logging.basicConfig(
 
 
 class GithubSync(object):
+    DEFAULT_STAT_VALUES = {
+        "prs_created": (0, "Only new PRs, including merge-conflicts"),
+        "prs_updated": (0, "PRs which exist before and which got a forcepush"),
+        "prs_closed_total": (0, "All PRs that was closed"),
+        "prs_closed_expired_reason": (0, "All PRs that was closed as expired"),
+        "branches_deleted": (0, "Branches that was deleted"),
+        "full_cycle_duration": (0, "Duration of one sync cycle"),
+        "mirror_duration": (0, "Duration of mirroring upstream"),
+        "pw_fetch_duration": (
+            0,
+            "Duration of initial search in PW, exclusing time to map existing PRs to PW entities",
+        ),
+        "patch_and_update_duration": (0, "Duration of git apply and git push"),
+        "pw_to_git_latency": (
+            0,
+            "Average latency between patch created in PW and appear in GH",
+        ),
+        "full_clones": (
+            0,
+            "Number of times we had to do a full clone instead of git fetch",
+        ),
+        "partial_clones": (0, "Number of git fetches"),
+        "merge_conflicts_total": (0, "All merge-conflicts"),
+        "initial_merge_conflicts": (
+            0,
+            "Merge conflicts that happen for a first patch in a series known to us",
+        ),
+        "existing_pr_merge_conflicts": (
+            0,
+            "Merge conflicts on PRs that was fast-forwardable before",
+        ),
+        "all_known_subjects": (
+            0,
+            "All known subjects, including ones that was found in PW, GH. Also includes expired patches.",
+        ),
+        "prs_total": (0, "All prs within the scope of work for this worker"),
+    }
+
     def __init__(
         self,
         pw_url,
@@ -73,6 +111,12 @@ class GithubSync(object):
         sha.update(f"{url}/{branch}".encode("utf-8"))
         return f"/tmp/pw_sync_{sha.hexdigest()}"
 
+    def stat_update(self, key, increment=1):
+        try:
+            self.stats[key] += increment
+        except:
+            self.logger.error(f"Failed to update stats key: {key}, {increment}")
+
     def do_sync(self):
         if "sync_from" in self.local_repo.remotes:
             urls = list(self.local_repo.remote("sync_from").urls)
@@ -93,6 +137,7 @@ class GithubSync(object):
 
     def fetch_repo(self, path, url):
         def full_sync(path, url):
+            self.stat_update("full_clones")
             shutil.rmtree(path, ignore_errors=True)
             return git.Repo.clone_from(url, path)
 
@@ -100,6 +145,7 @@ class GithubSync(object):
             repo = git.Repo.init(path)
             try:
                 repo.git.fetch("-p", "origin")
+                self.stat_update("partial_clones")
             except git.exc.GitCommandError as e:
                 # fall back to a full sync
                 repo = full_sync(path, url)
@@ -171,7 +217,10 @@ class GithubSync(object):
             self.logger.info(
                 f"Creating PR for '{series.subject}' with {series.age} delay"
             )
+            self.stat_update("pw_to_git_latency", series.age)
+            self.stat_update("prs_created")
             if flag:
+                self.stat_update("initial_merge_conflicts")
                 self._create_dummy_commit(branch_name)
             body = (
                 f"Pull request for series with\nsubject: {series.subject}\n"
@@ -191,11 +240,15 @@ class GithubSync(object):
 
         if (not flag) or (flag and not self._is_pr_flagged(pr)):
             if message:
+                self.stat_update("prs_updated")
                 pr.create_issue_comment(message)
 
         self._sync_pr_tags(pr, pr_tags)
 
         if close:
+            self.stat_update("prs_closed_total")
+            if series.expired:
+                self.stat_update("prs_closed_expired_reason")
             self.logger.warning(f"Closing PR {pr}")
             self._close_pr(pr)
         return pr
@@ -207,6 +260,7 @@ class GithubSync(object):
             Return False if at least one patch in series failed.
             If at least one patch in series failed nothing gets pushed.
         """
+        self.stat_update("all_known_subjects")
         self._reset_repo()
         if branch_name in self.local_repo.branches:
             self.local_repo.git.branch("-D", branch_name)
@@ -225,6 +279,7 @@ class GithubSync(object):
                 and branch_name in self.branches
             ):
                 self.logger.warning(f"Removing branch {branch_name}")
+                self.stat_update("branches_deleted")
                 self.repo.get_git_ref(f"heads/{branch_name}").delete()
             return False
         diffs = series_to_apply.diffs
@@ -269,7 +324,7 @@ class GithubSync(object):
                 self.logger.warn(
                     f'Failed to apply patch {diff["id"]} on top of {branch_name} for series {series_to_apply.id}'
                 )
-
+                self.update_stats("merge_conflicts_total")
                 self._comment_series_pr(
                     series_to_apply,
                     message=comment,
@@ -338,6 +393,11 @@ class GithubSync(object):
             return True
         return False
 
+    def _reset_stats(self):
+        self.stats = {}
+        for k in GithubSync.DEFAULT_STAT_VALUES:
+            self.stats[k] = GithubSync.DEFAULT_STAT_VALUES[k][0]
+
     def sync_branches(self):
         """
             One subject = one branch
@@ -349,14 +409,18 @@ class GithubSync(object):
         """
 
         # sync mirror and fetch current states of PRs
+        self._reset_stats()
+        sync_start = time.time()
         self.subjects = {}
         self.prs = {}
         self.all_prs = {}
         self.fetch_master()
         self.get_pulls()
         self.do_sync()
+        mirror_done = time.time()
 
         self.subjects = self.pw.get_relevant_subjects()
+        pw_done = time.time()
         # fetch recent subjects
         for subject in self.subjects:
             series_id = subject.id
@@ -375,3 +439,16 @@ class GithubSync(object):
                 subject = Subject(series.subject, self.pw)
                 branch_name = subject.branch
                 self.checkout_and_patch(branch_name, subject.latest_series)
+        patches_done = time.time()
+        self.stat_update("full_cycle_duration", patches_done - sync_start)
+        self.stat_update("mirror_duration", mirror_done - sync_start)
+        self.stat_update("pw_fetch_duration", pw_done - mirror_done)
+        self.stat_update("patch_and_update_duration", patches_done - pw_done)
+        for p in self.prs:
+            pr = self.prs[p]
+            if self._is_relevant_pr(pr):
+                self.stat_update("prs_total")
+        if self.stats["prs_created"] > 0:
+            self.stats["pw_to_git_latency"] = (
+                self.stats["pw_to_git_latency"] / self.stats["prs_created"]
+            )
