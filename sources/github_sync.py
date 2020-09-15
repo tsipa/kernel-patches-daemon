@@ -206,7 +206,8 @@ class GithubSync(object):
             Appends comment to a PR.
         """
         title = f"{series.subject}"
-        pr_tags = copy.copy(series.tags)
+        pr_tags = copy.copy(series.visible_tags)
+        pr_tags.add(self.master)
 
         if flag:
             pr_tags.add(self.merge_conflict_label)

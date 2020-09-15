@@ -149,6 +149,15 @@ class Series(object):
         return self._tags
 
     @property
+    def visible_tags(self):
+        self._visible_tags = set()
+        self._visible_tags.add(f"V{self.version}")
+        for diff in self.diffs:
+            self._visible_tags.add(diff["state"])
+
+        return self._visible_tags
+
+    @property
     def expirable(self):
         for diff in self.diffs:
             if diff["state"] in TTL:
