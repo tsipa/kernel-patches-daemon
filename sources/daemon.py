@@ -11,6 +11,17 @@ import re
 import argparse
 
 
+def get_repo(git, project):
+    repo_name = os.path.basename(project)
+    try:
+        user = git.get_user()
+        repo = user.get_repo(repo_name)
+    except GithubException:
+        org = os.path.split(project)[0].split(":")[-1]
+        repo = git.get_organization(org).get_repo(repo_name)
+    return repo
+
+
 class PWDaemon(object):
     def __init__(self, cfg, labels_cfg=None, logger=None):
 
@@ -40,14 +51,7 @@ class PWDaemon(object):
                 self.workers.append(worker)
                 if labels_cfg:
                     git = Github(self.config[project]["github_oauth_token"])
-                    repo_name = os.path.basename(project)
-                    try:
-                        user = git.get_user()
-                        repo = user.get_repo(repo_name)
-                    except GithubException:
-                        org = os.path.split(project)[0].split(":")[-1]
-                        repo = git.get_organization(org).get_repo(repo_name)
-
+                    repo = get_repo(git, project)
                     self.color_labels(repo)
 
     def color_labels(self, repo):
@@ -89,8 +93,7 @@ def purge(cfg):
         config = json.load(f)
     for project in config.keys():
         git = Github(config[project]["github_oauth_token"])
-        user = git.get_user()
-        repo = user.get_repo(os.path.basename(project))
+        repo = get_repo(git, project)
         branches = [x for x in repo.get_branches()]
         for branch_name in branches:
             if re.match(r"series/[0-9]+.*", branch_name.name):
