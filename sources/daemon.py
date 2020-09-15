@@ -93,7 +93,7 @@ def purge(cfg):
         repo = user.get_repo(os.path.basename(project))
         branches = [x for x in repo.get_branches()]
         for branch_name in branches:
-            if re.match(r"series/[0-9]+", branch_name.name):
+            if re.match(r"series/[0-9]+.*", branch_name.name):
                 repo.get_git_ref(f"heads/{branch_name.name}").delete()
 
 
@@ -114,17 +114,23 @@ def parse_args():
         default="~/.kernel-patches/logger.sh",
         help="Specify external scripts which stdin will be fed with metrics",
     )
+    parser.add_argument(
+        "--action",
+        default="start",
+        choices=["start", "purge"],
+        help="Purge will kill all existing PRs and delete all branches",
+    )
     args = parser.parse_args()
     return args
 
 
 if __name__ == "__main__":
-    if "purge" in sys.argv:
-        purge(cfg=f"{os.path.dirname(__file__)}/config.json")
+    args = parse_args()
+    cfg = os.path.expanduser(args.config)
+    labels = os.path.expanduser(args.label_colors)
+    logger = os.path.expanduser(args.metric_logger)
+    if args.action == "purge":
+        purge(cfg=cfg)
     else:
-        args = parse_args()
-        cfg = os.path.expanduser(args.config)
-        labels = os.path.expanduser(args.label_colors)
-        logger = os.path.expanduser(args.metric_logger)
         d = PWDaemon(cfg=cfg, labels_cfg=labels, logger=logger)
         d.loop()

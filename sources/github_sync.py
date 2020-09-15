@@ -80,6 +80,7 @@ class GithubSync(object):
         self.repo_name = os.path.basename(repo_url)
         self.repo_url = repo_url
         self.sync_from = sync_from
+        self.source_remote = "sync_from"
         self.master = master
         self.source_master = source_master
         self.git = Github(github_oauth_token)
@@ -102,7 +103,6 @@ class GithubSync(object):
         self.logger = logging.getLogger(__name__)
         # self.repodir = tempfile.TemporaryDirectory()
         self.repodir = self._uniq_tmp_folder(repo_url, master)
-        self.pr_branch_regexp = re.compile("series/[0-9]+")
 
     def _uniq_tmp_folder(self, url, branch):
         # use same foder for multiple invocation to avoid cloning whole tree every time
@@ -118,37 +118,41 @@ class GithubSync(object):
             self.logger.error(f"Failed to update stats key: {key}, {increment}")
 
     def do_sync(self):
-        if "sync_from" in self.local_repo.remotes:
-            urls = list(self.local_repo.remote("sync_from").urls)
+        # fetch upsteam and push to downstream
+        if self.source_remote in self.local_repo.remotes:
+            urls = list(self.local_repo.remote(self.source_remote).urls)
             if urls != [self.sync_from]:
                 self.logger.warn(f"remote sync_from set to track {urls}, re-creating")
-                self.local_repo.delete_remote("sync_from")
-                self.local_repo.create_remote("sync_from", self.sync_from)
+                self.local_repo.delete_remote(self.source_remote)
+                self.local_repo.create_remote(self.source_remote, self.sync_from)
         else:
-            self.local_repo.create_remote("sync_from", self.sync_from)
-        self.source = self.local_repo.remote("sync_from")
+            self.local_repo.create_remote(self.source_remote, self.sync_from)
+        self.source = self.local_repo.remote(self.source_remote)
         self.source.fetch(self.source_master)
         self.source_branch = getattr(self.source.refs, self.source_master)
-        self._reset_repo()
+        self._reset_repo(self.local_repo, f"{self.source_remote}/{self.source_master}")
         self.local_repo.git.push(
             "-f", "origin", f"{self.source_branch}:refs/heads/{self.master}"
         )
         self.master_sha = self.source_branch.object.hexsha
 
-    def fetch_repo(self, path, url):
-        def full_sync(path, url):
-            self.stat_update("full_clones")
+    def fetch_repo(self, path, url, branch):
+        def full_sync(path, url, branch):
             shutil.rmtree(path, ignore_errors=True)
-            return git.Repo.clone_from(url, path)
+            r = git.Repo.clone_from(url, path)
+            self._reset_repo(r, f"origin/{branch}")
+            self.stat_update("full_clones")
+            return r
 
         if os.path.exists(f"{path}/.git"):
             repo = git.Repo.init(path)
             try:
                 repo.git.fetch("-p", "origin")
+                self._reset_repo(repo, f"origin/{branch}")
                 self.stat_update("partial_clones")
             except git.exc.GitCommandError as e:
                 # fall back to a full sync
-                repo = full_sync(path, url)
+                repo = full_sync(path, url, branch)
         else:
             repo = full_sync(path, url)
         return repo
@@ -157,19 +161,21 @@ class GithubSync(object):
         """
             Fetch master only once
         """
-        self.local_repo = self.fetch_repo(self.repodir, self.repo_url)
-        self.ci_local_repo = self.fetch_repo(self.ci_repo_dir, self.ci_repo)
+        self.local_repo = self.fetch_repo(self.repodir, self.repo_url, self.master)
+        self.ci_local_repo = self.fetch_repo(
+            self.ci_repo_dir, self.ci_repo, self.ci_branch
+        )
         self.ci_local_repo.git.checkout(f"origin/{self.ci_branch}")
 
-    def _reset_repo(self):
-        self.local_repo.git.reset("--hard", self.source_branch)
-        self.source_branch.checkout()
+    def _reset_repo(self, repo, branch):
+        repo.git.reset("--hard", branch)
+        repo.git.checkout(branch)
 
     def _create_dummy_commit(self, branch_name):
         """
             Reset branch, create dummy commit
         """
-        self._reset_repo()
+        self._reset_repo(self.local_repo, f"{self.source_remote}/{self.source_master}")
         if branch_name in self.local_repo.branches:
             self.local_repo.git.branch("-D", branch_name)
         self.local_repo.git.checkout("-b", branch_name)
@@ -262,7 +268,7 @@ class GithubSync(object):
             If at least one patch in series failed nothing gets pushed.
         """
         self.stat_update("all_known_subjects")
-        self._reset_repo()
+        self._reset_repo(self.local_repo, f"{self.source_remote}/{self.source_master}")
         if branch_name in self.local_repo.branches:
             self.local_repo.git.branch("-D", branch_name)
         self.local_repo.git.checkout("-b", branch_name)
@@ -375,7 +381,6 @@ class GithubSync(object):
             PR is relevant if it
             - coming from user
             - to same user
-            - coming from branch with pattern series/[0-9]+
             - to branch {master}
             - is open
         """
@@ -386,7 +391,6 @@ class GithubSync(object):
         state = pr.state
         if (
             src_user == self.user_login
-            and re.match(self.pr_branch_regexp, src_branch)
             and tgt_user == self.user_login
             and tgt_branch == self.master
             and state == "open"
@@ -426,19 +430,20 @@ class GithubSync(object):
         for subject in self.subjects:
             series_id = subject.id
             # branch name == sid of the first known series
-            branch_name = subject.branch
+            branch_name = f"{subject.branch}=>{self.master}"
             # series to apply - last known series
             series = subject.latest_series
             self.checkout_and_patch(branch_name, series)
         # sync old subjects
+        subject_names = [x.subject for x in self.subjects]
         for subject_name in self.prs:
             pr = self.prs[subject_name]
-            if subject_name not in self.subjects and self._is_relevant_pr(pr):
+            if subject_name not in subject_names and self._is_relevant_pr(pr):
                 branch_name = self.prs[subject_name].head.label.split(":")[1]
-                series_id = branch_name.split("/")[1]
+                series_id = branch_name.split("/")[1].split("=>")[0]
                 series = Series(self.pw.get("series", series_id), self.pw)
                 subject = Subject(series.subject, self.pw)
-                branch_name = subject.branch
+                branch_name = f"{subject.branch}=>{self.master}"
                 self.checkout_and_patch(branch_name, subject.latest_series)
         patches_done = time.time()
         self.stat_update("full_cycle_duration", patches_done - sync_start)
