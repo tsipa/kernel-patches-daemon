@@ -154,7 +154,7 @@ class GithubSync(object):
                 # fall back to a full sync
                 repo = full_sync(path, url, branch)
         else:
-            repo = full_sync(path, url)
+            repo = full_sync(path, url, branch)
         return repo
 
     def fetch_master(self):
