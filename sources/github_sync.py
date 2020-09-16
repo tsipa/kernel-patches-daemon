@@ -331,7 +331,7 @@ class GithubSync(object):
                 self.logger.warn(
                     f'Failed to apply patch {diff["id"]} on top of {branch_name} for series {series_to_apply.id}'
                 )
-                self.update_stats("merge_conflicts_total")
+                self.stat_update("merge_conflicts_total")
                 self._comment_series_pr(
                     series_to_apply,
                     message=comment,
