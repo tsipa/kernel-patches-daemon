@@ -22,7 +22,7 @@ RELEVANT_STATES = {
 }
 RELEVANT_STATE_IDS = [RELEVANT_STATES[x] for x in RELEVANT_STATES]
 # with these tags will be closed if no updates within TTL
-TTL = {"changes-requested": 3600, "rfc": 3600}
+TTL = {"changes-requested": 3600, "rfc": 3600, "awaiting-upstream": 3600}
 
 # when we don't interested in this patch anymore
 IRRELEVANT_STATES = {
