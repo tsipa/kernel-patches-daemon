@@ -9,6 +9,8 @@ import time
 import dateutil.parser as dp
 import pytz
 import functools
+import tempfile
+
 from tzlocal import get_localzone
 
 # when we want to push this patch through CI
@@ -85,6 +87,7 @@ class Series(object):
         self._relevant_series = None
         self._diffs = None
         self._tags = None
+        self._patch_blob = None
         self._subject_regexp = re.compile(r"(?P<header>\[[^\]]*\])?(?P<name>.+)")
         for key in data:
             setattr(self, key, data[key])
@@ -183,6 +186,18 @@ class Series(object):
     def age(self):
         return self._get_age(self.date)
 
+    @property
+    def patch_blob(self):
+        """ Returns file-like object """
+        if self._patch_blob:
+            return self._patch_blob
+        data = self.pw_client.get_blob(self.mbox)
+        self._patch_blob = tempfile.NamedTemporaryFile(mode="r+b")
+        self._patch_blob.write(data)
+        self._patch_blob.seek(0)
+
+        return self._patch_blob
+
 
 class Patchwork(object):
     def __init__(self, url, pw_search_patterns, pw_lookback=7, filter_tags=None):
@@ -244,6 +259,11 @@ class Patchwork(object):
     @metered("by_id")
     def get(self, object_type, identifier):
         return self._get(f"{object_type}/{identifier}/").json()
+
+    @metered("api", obj_type="non")
+    def get_blob(self, url):
+        r = requests.get(url, allow_redirects=True)
+        return r.content
 
     def _get(self, req):
         return self._request(f"{self.server}/api/1.1/{req}")

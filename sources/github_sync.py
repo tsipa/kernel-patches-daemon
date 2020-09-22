@@ -3,7 +3,6 @@ from patchwork import Patchwork, Series, Subject
 from github import Github, GithubException
 import git
 import re
-import tempfile
 import shutil
 import os
 import logging
@@ -101,7 +100,6 @@ class GithubSync(object):
         self.merge_conflict_label = merge_conflict_label
         # self.master = self.repo.get_branch(master)
         self.logger = logging.getLogger(__name__)
-        # self.repodir = tempfile.TemporaryDirectory()
         self.repodir = self._uniq_tmp_folder(repo_url, master)
 
     def _uniq_tmp_folder(self, url, branch):
@@ -306,48 +304,21 @@ class GithubSync(object):
             self.local_repo.git.add("-f", ".travis.yml")
             self.local_repo.git.commit("-a", "-m", "adding ci files")
 
-        for diff in diffs:
-            f = tempfile.NamedTemporaryFile(mode="w", delete=False)
-            f.write(diff["diff"])
-            fname = f.name
-            f.close()
-            try:
-                self.local_repo.git.apply(["-3", fname])
-                author = diff["submitter"]["name"]
-                email = diff["submitter"]["email"]
-                content = diff["content"]
-                self.local_repo.git.add("-A")
-                f = tempfile.NamedTemporaryFile(mode="w", delete=False)
-                f.write(content)
-                fname_commit = f.name
-                f.close()
-                self.local_repo.git.commit(
-                    f"--author='{author} <{email}>'", "-F", f"{fname_commit}"
-                )
-                self.logger.warn(f'{branch_name} / {diff["id"]} applied successfully"')
-                comment = f"{comment}\npatch {diff['web_url']} applied successfully"
-            except git.exc.GitCommandError as e:
-                comment = f"{comment}\nPull request is *NOT* updated. Failed to apply {diff['web_url']}, error message was:\n{e}"
-                self.logger.warn(
-                    f'Failed to apply patch {diff["id"]} on top of {branch_name} for series {series_to_apply.id}'
-                )
-                self.stat_update("merge_conflicts_total")
-                self._comment_series_pr(
-                    series_to_apply,
-                    message=comment,
-                    can_create=True,
-                    branch_name=branch_name,
-                    flag=True,
-                )
-                os.unlink(fname)
-                if fname_commit:
-                    os.unlink(fname_commit)
-                succeed = False
-                return False
-            os.unlink(fname)
-            if fname_commit:
-                os.unlink(fname_commit)
-                fname_commit = None
+        fh = series_to_apply.patch_blob
+        try:
+            self.local_repo.git.am("-3", istream=fh)
+        except git.exc.GitCommandError as e:
+            comment = f"{comment}\nPull request is *NOT* updated. Failed to apply {series_to_apply.web_url}, error message:\n{e}"
+            self.logger.warn(comment)
+            self.stat_update("merge_conflicts_total")
+            self._comment_series_pr(
+                series_to_apply,
+                message=comment,
+                can_create=True,
+                branch_name=branch_name,
+                flag=True,
+            )
+            return False
 
         # force push only if if's a new branch or there is code diffs between old and new branches
         # which could mean that we applied new set of patches or just rebased
