@@ -8,6 +8,7 @@ import datetime
 import time
 import dateutil.parser as dp
 import pytz
+import functools
 from tzlocal import get_localzone
 
 # when we want to push this patch through CI
@@ -205,12 +206,49 @@ class Patchwork(object):
 
         return ret
 
+    def drop_counters(self):
+        self.stats = {}
+        for obj in ["series", "patches", "projects"]:
+            for query_type in ["by_id", "search"]:
+                self.stats[f"{obj}_{query_type}_count"] = 0
+                self.stats[f"{obj}_{query_type}_time"] = 0
+        self.stats[f"non_api_count"] = 0
+        self.stats[f"non_api_time"] = 0
+
+    def stat_update(self, key, increment=1):
+        try:
+            self.stats[key] += increment
+        except:
+            self.logger.error(f"Failed to update stats key: {key}, {increment}")
+
+    def metered(query_type, obj_type=None):
+        def metered_decorator(func):
+            @functools.wraps(func)
+            def metered_wrapper(*args, **kwargs):
+                self = args[0]
+                if not obj_type:
+                    obj = args[1]
+                else:
+                    obj = obj_type
+                start = time.time()
+                result = func(*args, **kwargs)
+                t = time.time() - start
+                self.stat_update(f"{obj}_{query_type}_time", t)
+                self.stat_update(f"{obj}_{query_type}_count")
+                return result
+
+            return metered_wrapper
+
+        return metered_decorator
+
+    @metered("by_id")
     def get(self, object_type, identifier):
         return self._get(f"{object_type}/{identifier}/").json()
 
     def _get(self, req):
         return self._request(f"{self.server}/api/1.1/{req}")
 
+    @metered("search")
     def get_all(self, object_type, filters=None):
         if filters is None:
             filters = {}

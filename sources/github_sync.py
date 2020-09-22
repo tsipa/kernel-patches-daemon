@@ -415,6 +415,7 @@ class GithubSync(object):
 
         # sync mirror and fetch current states of PRs
         self._reset_stats()
+        self.pw.drop_counters()
         sync_start = time.time()
         self.subjects = {}
         self.prs = {}
@@ -458,3 +459,5 @@ class GithubSync(object):
             self.stats["pw_to_git_latency"] = (
                 self.stats["pw_to_git_latency"] / self.stats["prs_created"]
             )
+
+        self.stats.update(self.pw.stats)

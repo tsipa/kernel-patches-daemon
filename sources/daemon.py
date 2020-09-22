@@ -71,10 +71,11 @@ class PWDaemon(object):
         if logger and os.path.isfile(logger) and os.access(logger, os.X_OK):
             metrics = {
                 "int": {"time": time.time(),},
+                "float": {},
                 "normal": {"project": worker.repo_url, "branch": worker.master,},
             }
             for s in worker.stats:
-                metrics["int"][s] = worker.stats[s]
+                metrics["float"][s] = worker.stats[s]
 
             worker.repo_url
             p = Popen([logger], stdout=PIPE, stdin=PIPE, stderr=PIPE)
