@@ -316,8 +316,8 @@ class GithubSync(object):
             conflict = self.local_repo.git.diff()
             comment = (
                 f"{comment}\nPull request is *NOT* updated. Failed to apply {series_to_apply.web_url}\n"
-                f"error message:\n{e}\n\n"
-                f"conflict: {conflict}\n"
+                f"error message:\n```{e}```\n\n"
+                f"conflict: ```{conflict}```\n"
             )
             self.logger.warn(comment)
             self.stat_update("merge_conflicts_total")
