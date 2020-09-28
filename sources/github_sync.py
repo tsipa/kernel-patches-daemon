@@ -166,6 +166,12 @@ class GithubSync(object):
         self.ci_local_repo.git.checkout(f"origin/{self.ci_branch}")
 
     def _reset_repo(self, repo, branch):
+        # wipe leftovers from previous cycle if any
+        try:
+            repo.git.am("--abort")
+        except git.exc.GitCommandError:
+            pass
+
         repo.git.reset("--hard", branch)
         repo.git.checkout(branch)
 
@@ -287,7 +293,6 @@ class GithubSync(object):
                 self.stat_update("branches_deleted")
                 self.repo.get_git_ref(f"heads/{branch_name}").delete()
             return False
-        diffs = series_to_apply.diffs
         fname = None
         fname_commit = None
         title = f"{series_to_apply.subject}"
@@ -308,7 +313,12 @@ class GithubSync(object):
         try:
             self.local_repo.git.am("-3", istream=fh)
         except git.exc.GitCommandError as e:
-            comment = f"{comment}\nPull request is *NOT* updated. Failed to apply {series_to_apply.web_url}, error message:\n{e}"
+            conflict = self.local_repo.git.diff()
+            comment = (
+                f"{comment}\nPull request is *NOT* updated. Failed to apply {series_to_apply.web_url}\n"
+                f"error message:\n{e}\n\n"
+                f"conflict: {conflict}\n"
+            )
             self.logger.warn(comment)
             self.stat_update("merge_conflicts_total")
             self._comment_series_pr(
