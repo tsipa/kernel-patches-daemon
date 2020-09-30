@@ -16,16 +16,10 @@ from tzlocal import get_localzone
 # when we want to push this patch through CI
 RELEVANT_STATES = {
     "new": 1,
-    "under-review": 2,
-    "rfc": 5,
-    "changes-requested": 7,
-    "awaiting-upstream": 8,
-    "deferred": 10,
-    "needs-review-ack": 11,
 }
 RELEVANT_STATE_IDS = [RELEVANT_STATES[x] for x in RELEVANT_STATES]
 # with these tags will be closed if no updates within TTL
-TTL = {"changes-requested": 3600, "rfc": 3600, "awaiting-upstream": 3600}
+TTL = {"changes-requested": 3600, "rfc": 3600}
 
 # when we don't interested in this patch anymore
 IRRELEVANT_STATES = {
@@ -33,6 +27,12 @@ IRRELEVANT_STATES = {
     "rejected": 4,
     "not-applicable": 6,
     "superseded": 9,
+    "under-review": 2,
+    "rfc": 5,
+    "changes-requested": 7,
+    "awaiting-upstream": 8,
+    "deferred": 10,
+    "needs-review-ack": 11,
 }
 
 logging.basicConfig(

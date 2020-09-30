@@ -243,6 +243,7 @@ class GithubSync(object):
             )
             self.prs[title] = pr
         else:
+            self.logger.error(f"BUG: Unable to find for PR for {series.subject}")
             return False
 
         if pr.state == "closed" and close:
