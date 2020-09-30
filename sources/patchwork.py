@@ -222,7 +222,7 @@ class Patchwork(object):
         return ret
 
     def drop_counters(self):
-        self.stats = {}
+        self.stats = {"bug_occurence": 0}
         for obj in ["series", "patches", "projects"]:
             for query_type in ["by_id", "search"]:
                 self.stats[f"{obj}_{query_type}_count"] = 0
@@ -234,6 +234,7 @@ class Patchwork(object):
         try:
             self.stats[key] += increment
         except:
+            self.stat_update("bug_occurence")
             self.logger.error(f"Failed to update stats key: {key}, {increment}")
 
     def metered(query_type, obj_type=None):
@@ -324,6 +325,7 @@ class Patchwork(object):
                     if series["name"]:
                         s = Series(series, self)
                     else:
+                        self.stat_update("bug_occurence")
                         self.logger.error(f"Malformed series: {series}")
                         continue
                     if s.subject not in subjects:

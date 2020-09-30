@@ -54,6 +54,7 @@ class GithubSync(object):
             "All known subjects, including ones that was found in PW, GH. Also includes expired patches.",
         ),
         "prs_total": (0, "All prs within the scope of work for this worker"),
+        "bug_occurence": (0, "Weird conditions which require investigation")
     }
 
     def __init__(
@@ -113,7 +114,8 @@ class GithubSync(object):
         try:
             self.stats[key] += increment
         except:
-            self.logger.error(f"Failed to update stats key: {key}, {increment}")
+            self.stat_update("bug_occurence")
+            self.logger.error(f"BUG: Failed to update stats key: {key}, {increment}")
 
     def do_sync(self):
         # fetch upsteam and push to downstream
@@ -243,6 +245,7 @@ class GithubSync(object):
             )
             self.prs[title] = pr
         else:
+            self.stat_update("bug_occurence")
             self.logger.error(f"BUG: Unable to find for PR for {series.subject}")
             return False
 
@@ -433,6 +436,8 @@ class GithubSync(object):
         self.stat_update("mirror_duration", mirror_done - sync_start)
         self.stat_update("pw_fetch_duration", pw_done - mirror_done)
         self.stat_update("patch_and_update_duration", patches_done - pw_done)
+        self.stat_update("bug_occurence", self.pw.stats["bug_occurence"])
+        del self.pw.stats["bug_occurence"]
         for p in self.prs:
             pr = self.prs[p]
             if self._is_relevant_pr(pr):
