@@ -110,8 +110,7 @@ class Series(object):
             self._diffs.append(p)
         return self._diffs
 
-    @property
-    def closed(self):
+    def _closed(self):
         """
             Series considered closed if at least one patch in this series
             is in irrelevant states
@@ -120,6 +119,10 @@ class Series(object):
             if diff["state"] in IRRELEVANT_STATES:
                 return True
         return False
+
+    @property
+    def closed(self):
+        return self._closed()
 
     def _parse_for_tags(self, name):
         match = re.match(self.tag_regexp, name)
@@ -152,6 +155,9 @@ class Series(object):
 
         return self._tags
 
+    def _version(self):
+        return self.version
+
     @property
     def visible_tags(self):
         self._visible_tags = set()
@@ -168,14 +174,17 @@ class Series(object):
                 return True
         return False
 
-    @property
-    def expired(self):
+    def _expired(self):
         now = datetime.datetime.now()
         for diff in self.diffs:
             if diff["state"] in TTL:
                 if self._get_age(diff["date"]) >= TTL[diff["state"]]:
                     return True
         return False
+
+    @property
+    def expired(self):
+        return self._expired()
 
     def _get_age(self, date):
         now = datetime.datetime.now().astimezone(get_localzone())
@@ -200,15 +209,28 @@ class Series(object):
 
 
 class Patchwork(object):
-    def __init__(self, url, pw_search_patterns, pw_lookback=7, filter_tags=None):
+    def __init__(
+        self,
+        url,
+        pw_search_patterns,
+        pw_lookback=7,
+        filter_tags=None,
+        build_fixtures=False,
+    ):
+        self.build_fixtures = build_fixtures
         self.server = url
         self.logger = logging.getLogger(__name__)
 
-        today = DT.date.today()
-        lookback = today - DT.timedelta(days=pw_lookback)
-        self.since = lookback.strftime("%Y-%m-%dT%H:%M:%S")
+        self.since = self.format_since(pw_lookback)
         self.pw_search_patterns = pw_search_patterns
         self.filter_tags = set(filter_tags)
+        self.known_series = {}
+        self.known_subjects = {}
+
+    def format_since(self, pw_lookback):
+        today = DT.date.today()
+        lookback = today - DT.timedelta(days=pw_lookback)
+        return lookback.strftime("%Y-%m-%dT%H:%M:%S")
 
     def _request(self, url):
         self.logger.debug(f"Patchwork {self.server} request: {url}")
@@ -266,8 +288,27 @@ class Patchwork(object):
         r = requests.get(url, allow_redirects=True)
         return r.content
 
+    # this method only used for fixtures collection for unit tests
+    def _get_w_fixtures(self, req):
+        with open("./pw_fixtures.json", "a+") as f:
+            f.seek(0)
+            try:
+                fixtures = json.load(f)
+            except json.decoder.JSONDecodeError:
+                fixtures = {}
+            r = self._request(f"{self.server}/api/1.1/{req}")
+            if req in fixtures:
+                self.logger.warning(f"Repetitive call {req}")
+            fixtures[req] = r.json()
+        with open("./pw_fixtures.json", "w") as f:
+            json.dump(fixtures, f)
+            return r
+
     def _get(self, req):
-        return self._request(f"{self.server}/api/1.1/{req}")
+        if self.build_fixtures:
+            return self._get_w_fixtures(req)
+        else:
+            return self._request(f"{self.server}/api/1.1/{req}")
 
     @metered("search")
     def get_all(self, object_type, filters=None):
@@ -311,6 +352,24 @@ class Patchwork(object):
                 self.logger.debug(f"Found {project}")
                 return project
 
+    def get_series_by_id(self, sid):
+        # fetches directly only if series is not available in local scope
+        if sid not in self.known_series:
+            series = Series(self.get("series", sid), self)
+            self.known_series[sid] = series
+        else:
+            series = self.known_series[sid]
+        return series
+
+    def get_subject_by_series(self, series):
+        # local cache for subjects
+        if series.subject not in self.known_subjects:
+            subject = Subject(series.subject, self)
+            self.known_subjects[series.subject] = subject
+        else:
+            subject = self.known_subjects[series.subject]
+        return subject
+
     def get_relevant_subjects(self, full=True):
         subjects = {}
         filtered_subjects = []
@@ -324,20 +383,30 @@ class Patchwork(object):
                 for series in patch_series:
                     if series["name"]:
                         s = Series(series, self)
+                        self.known_series[str(s.id)] = s
                     else:
                         self.stat_update("bug_occurence")
                         self.logger.error(f"Malformed series: {series}")
                         continue
                     if s.subject not in subjects:
                         subjects[s.subject] = Subject(s.subject, self)
+                        self.known_subjects[s.subject] = subjects[s.subject]
             for subject in subjects:
                 excluded_tags = subjects[subject].tags & self.filter_tags
-                if not excluded_tags and not subjects[subject].expired:
+                if (
+                    not excluded_tags
+                    and not subjects[subject].expired
+                    and not subjects[subject].closed
+                ):
                     self.logger.warning(f"Found matching relevant subject {subject}")
                     filtered_subjects.append(subjects[subject])
                 elif subjects[subject].expired:
                     self.logger.warning(
                         f"Filtered {subjects[subject].web_url} ( {subject} ) as expired",
+                    )
+                elif subjects[subject].closed:
+                    self.logger.warning(
+                        f"Filtered {subjects[subject].web_url} ( {subject} ) as closed",
                     )
                 else:
                     self.logger.warning(

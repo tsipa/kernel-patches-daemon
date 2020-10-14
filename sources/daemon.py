@@ -23,7 +23,7 @@ def get_repo(git, project):
 
 
 class PWDaemon(object):
-    def __init__(self, cfg, labels_cfg=None, logger=None):
+    def __init__(self, cfg, labels_cfg=None, logger=None, build_fixtures=False):
 
         with open(cfg) as f:
             self.config = json.load(f)
@@ -47,6 +47,7 @@ class PWDaemon(object):
                     ci_repo=worker_cfg.get("ci_repo", None),
                     ci_branch=worker_cfg.get("ci_branch", None),
                     filter_tags=worker_cfg.get("filter_tags", None),
+                    build_fixtures=build_fixtures,
                 )
                 self.workers.append(worker)
                 if labels_cfg:
@@ -119,6 +120,9 @@ def parse_args():
         help="Specify external scripts which stdin will be fed with metrics",
     )
     parser.add_argument(
+        "--build-fixtures", dest="build_fixtures", default=False, action="store_true"
+    )
+    parser.add_argument(
         "--action",
         default="start",
         choices=["start", "purge"],
@@ -136,5 +140,10 @@ if __name__ == "__main__":
     if args.action == "purge":
         purge(cfg=cfg)
     else:
-        d = PWDaemon(cfg=cfg, labels_cfg=labels, logger=logger)
+        d = PWDaemon(
+            cfg=cfg,
+            labels_cfg=labels,
+            logger=logger,
+            build_fixtures=args.build_fixtures,
+        )
         d.loop()
