@@ -389,7 +389,7 @@ class GithubSync(object):
                 f"error message:\n```\n{e}\n```\n\n"
                 f"conflict:\n```\n{conflict}\n```\n"
             )
-            self.logger.warn(comment)
+            self.logger.warn(f"Failed to apply {series.url}")
             self.stat_update("merge_conflicts_total")
             return self._comment_series_pr(
                 series,

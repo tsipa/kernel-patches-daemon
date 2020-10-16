@@ -202,7 +202,7 @@ class TestGhSync(unittest.TestCase):
         stats["created_prs"] = copy.copy(self.created_prs)
         stats["closed_prs"] = copy.copy(self.closed_prs)
         stats["deleted_branches"] = copy.copy(self.branch_delete_mock.call_count)
-        stats["reopened_prs"] =  copy.copy(self.reopened_prs)
+        stats["reopened_prs"] = copy.copy(self.reopened_prs)
         return stats
 
     def _mock_series_state(self, title, status):
@@ -233,7 +233,14 @@ class TestGhSync(unittest.TestCase):
                 return version
             else:
                 return original(self)
-        def mock_relevant_series_cnt(self, subject, original=GithubSync._subject_count_series, title=title, cnt=version):
+
+        def mock_relevant_series_cnt(
+            self,
+            subject,
+            original=GithubSync._subject_count_series,
+            title=title,
+            cnt=version,
+        ):
             if subject.subject == title:
                 return version
             else:
@@ -243,9 +250,10 @@ class TestGhSync(unittest.TestCase):
             "patchwork.Series._version", side_effect=version_mock, autospec=True
         )
         self.series_cnt_patcher = patch(
-            "sources.github_sync.GithubSync._subject_count_series", side_effect=mock_relevant_series_cnt, autospec=True
+            "sources.github_sync.GithubSync._subject_count_series",
+            side_effect=mock_relevant_series_cnt,
+            autospec=True,
         )
-
 
     def test_create_pr(self):
         """
@@ -262,7 +270,6 @@ class TestGhSync(unittest.TestCase):
         self.assertEqual(stats["deleted_branches"], baseline["deleted_branches"])
         self.assertEqual(stats["reopened_prs"], baseline["reopened_prs"])
 
-
     def test_comment_pr(self):
         """
             - Every time we have a diff for existing PR we must add a comment
@@ -276,13 +283,13 @@ class TestGhSync(unittest.TestCase):
         self.git_diff_mock.side_effect = diffs
         self.worker.sync_branches()
         stats = self._get_current_stats()
-        self.assertEqual(len(stats["commented_prs"]) - len(baseline["commented_prs"]), 1)
+        self.assertEqual(
+            len(stats["commented_prs"]) - len(baseline["commented_prs"]), 1
+        )
         self.assertEqual(stats["created_prs"], baseline["created_prs"])
         self.assertEqual(stats["closed_prs"], baseline["closed_prs"])
         self.assertEqual(stats["deleted_branches"], baseline["deleted_branches"])
         self.assertEqual(stats["reopened_prs"], baseline["reopened_prs"])
-
-
 
     def test_close_pr(self):
         """
@@ -298,7 +305,9 @@ class TestGhSync(unittest.TestCase):
         stats = self._get_current_stats()
         self.assertEqual(stats["created_prs"], baseline["created_prs"])
         self.assertEqual(len(stats["closed_prs"]) - len(baseline["closed_prs"]), 1)
-        self.assertEqual(len(stats["commented_prs"]) - len(baseline["commented_prs"]), 1)
+        self.assertEqual(
+            len(stats["commented_prs"]) - len(baseline["commented_prs"]), 1
+        )
         self.assertEqual(stats["deleted_branches"] - baseline["deleted_branches"], 1)
         self.assertEqual(stats["reopened_prs"], baseline["reopened_prs"])
 
@@ -316,10 +325,11 @@ class TestGhSync(unittest.TestCase):
         stats = self._get_current_stats()
         self.assertEqual(stats["created_prs"], baseline["created_prs"])
         self.assertEqual(len(stats["closed_prs"]) - len(baseline["closed_prs"]), 1)
-        self.assertEqual(len(stats["commented_prs"]) - len(baseline["commented_prs"]), 1)
+        self.assertEqual(
+            len(stats["commented_prs"]) - len(baseline["commented_prs"]), 1
+        )
         self.assertEqual(stats["deleted_branches"], baseline["deleted_branches"])
         self.assertEqual(stats["reopened_prs"], baseline["reopened_prs"])
-
 
     def _delete_expired_branch(self, delta):
         # it's possible to have multiple PRs for same series due to previous implementation
@@ -350,7 +360,6 @@ class TestGhSync(unittest.TestCase):
         self.assertEqual(stats["commented_prs"], baseline["commented_prs"])
         self.assertEqual(stats["deleted_branches"] - baseline["deleted_branches"], 1)
         self.assertEqual(stats["reopened_prs"], baseline["reopened_prs"])
-
 
     def test_keep_expired_branch(self):
         """
@@ -387,11 +396,12 @@ class TestGhSync(unittest.TestCase):
         self.series_cnt_patcher.stop()
         stats = self._get_current_stats()
         self.assertEqual(stats["created_prs"], baseline["created_prs"])
-        self.assertEqual(len(stats["commented_prs"]) - len(baseline["commented_prs"]), 1)
+        self.assertEqual(
+            len(stats["commented_prs"]) - len(baseline["commented_prs"]), 1
+        )
         self.assertEqual(stats["closed_prs"], baseline["closed_prs"])
         self.assertEqual(stats["deleted_branches"], baseline["deleted_branches"])
         self.assertEqual(len(stats["reopened_prs"]) - len(baseline["reopened_prs"]), 1)
-
 
 
 if __name__ == "__main__":

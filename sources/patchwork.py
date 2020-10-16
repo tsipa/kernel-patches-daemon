@@ -224,8 +224,6 @@ class Patchwork(object):
         self.since = self.format_since(pw_lookback)
         self.pw_search_patterns = pw_search_patterns
         self.filter_tags = set(filter_tags)
-        self.known_series = {}
-        self.known_subjects = {}
 
     def format_since(self, pw_lookback):
         today = DT.date.today()
@@ -373,6 +371,9 @@ class Patchwork(object):
     def get_relevant_subjects(self, full=True):
         subjects = {}
         filtered_subjects = []
+        self.known_series = {}
+        self.known_subjects = {}
+
         for pattern in self.pw_search_patterns:
             p = {"since": self.since, "state": RELEVANT_STATE_IDS, "archived": False}
             p.update(pattern)
@@ -402,15 +403,15 @@ class Patchwork(object):
                     filtered_subjects.append(subjects[subject])
                 elif subjects[subject].expired:
                     self.logger.warning(
-                        f"Filtered {subjects[subject].web_url} ( {subject} ) as expired",
+                        f"Filtered {subjects[subject].url} ( {subject} ) as expired",
                     )
                 elif subjects[subject].closed:
                     self.logger.warning(
-                        f"Filtered {subjects[subject].web_url} ( {subject} ) as closed",
+                        f"Filtered {subjects[subject].url} ( {subject} ) as closed",
                     )
                 else:
                     self.logger.warning(
-                        f"Filtered {subjects[subject].web_url} ( {subject} )  due to tags: %s",
+                        f"Filtered {subjects[subject].url} ( {subject} )  due to tags: %s",
                         excluded_tags,
                     )
         return filtered_subjects
