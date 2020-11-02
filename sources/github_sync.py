@@ -210,7 +210,7 @@ class GithubSync(object):
 
     def _reopen_pr(self, pr):
         pr.edit(state="open")
-        add_pr(pr)
+        self.add_pr(pr)
         self.prs[pr.title] = pr
 
     def _sync_pr_tags(self, pr, tags):
