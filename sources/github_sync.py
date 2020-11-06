@@ -244,7 +244,7 @@ class GithubSync(object):
                 return self.all_prs[branch][self.master][0]
         # we failed to find active PR, now let's try to guess closed PR
         # is:pr is:closed head:"series/358111=>bpf"
-        if series._version() > 1:
+        if branch and branch in self.branches and series._version() > 1:
             # no reason to look for closed expired PRs for V1
             # we assuming that series cannot be re-opened
             if not subject:
