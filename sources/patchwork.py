@@ -211,7 +211,7 @@ class Series(object):
         # no special handling for no key exceptions
         # right now i'm considering that if we wasn't able to find key we want to die
         for key, value in pattern.items():
-            if key is "project" or "delegate":
+            if key in ["project", "delegate"]:
                 if diff[key]["id"] != value:
                     return False
             elif diff[key] != value:
@@ -220,8 +220,7 @@ class Series(object):
 
 
     def is_relevant_to_search(self):
-        patterns = self.pw.pw_search_patterns
-        for pattern in self.pw.pw_search_patterns:
+        for pattern in self.pw_client.pw_search_patterns:
             for diff in self.diffs:
                 if self._match_diff(pattern, diff):
                     return True

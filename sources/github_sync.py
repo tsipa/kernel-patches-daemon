@@ -330,7 +330,7 @@ class GithubSync(object):
         return pr
 
     def _pr_closed(self, branch_name, series):
-        if series.closed or series.expired or not series.is_relevant_to_search:
+        if series.closed or series.expired or not series.is_relevant_to_search():
             if series.closed:
                 comment = f"At least one diff in series {series.web_url} irrelevant now. Closing PR."
             elif not series.is_relevant_to_search:
