@@ -333,7 +333,7 @@ class GithubSync(object):
         if series.closed or series.expired or not series.is_relevant_to_search():
             if series.closed:
                 comment = f"At least one diff in series {series.web_url} irrelevant now. Closing PR."
-            elif not series.is_relevant_to_search:
+            elif not series.is_relevant_to_search():
                 comment = f"At least one diff in series {series.web_url} irrelevant now for {self.pw.pw_search_patterns}"
             else:
                 comment = (
