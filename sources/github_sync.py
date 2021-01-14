@@ -18,6 +18,9 @@ logging.basicConfig(
 
 BRANCH_TTL = 172800  # w
 HEAD_BASE_SEPARATOR = "=>"
+KNOWN_OK_COMMENT_EXCEPTIONS = [
+    "Commenting is disabled on issues with more than 2500 comments"
+]
 
 
 class GithubSync(object):
@@ -317,7 +320,14 @@ class GithubSync(object):
         if (not flag) or (flag and not self._is_pr_flagged(pr)):
             if message:
                 self.stat_update("prs_updated")
-                pr.create_issue_comment(message)
+                try:
+                    pr.create_issue_comment(message)
+                except GithubException as e:
+                    emsg = e._GithubException__data['message']
+                    if emsg in KNOWN_OK_COMMENT_EXCEPTIONS:
+                        self.logger.error(f"BUG: {emsg}")
+                    else:
+                        raise e
 
         self._sync_pr_tags(pr, pr_tags)
 

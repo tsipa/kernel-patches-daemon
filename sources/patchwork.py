@@ -88,7 +88,7 @@ class Series(object):
         self._diffs = None
         self._tags = None
         self._patch_blob = None
-        self._subject_regexp = re.compile(r"(?P<header>\[[^\]]*\])?(?P<name>.+)")
+        self._subject_regexp = re.compile(r"(?P<header>\[[^\]]*\])? *(?P<name>.+)")
         for key in data:
             setattr(self, key, data[key])
         self.subject = re.match(self._subject_regexp, data["name"]).group("name")
@@ -199,6 +199,7 @@ class Series(object):
     def patch_blob(self):
         """ Returns file-like object """
         if self._patch_blob:
+            self._patch_blob.seek(0)
             return self._patch_blob
         data = self.pw_client.get_blob(self.mbox)
         self._patch_blob = tempfile.NamedTemporaryFile(mode="r+b")
