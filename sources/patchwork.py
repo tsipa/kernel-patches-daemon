@@ -19,6 +19,7 @@ RELEVANT_STATES = {
     "rfc": 5,
     "changes-requested": 7,
 }
+RFC_TAG = "RFC"
 RELEVANT_STATE_IDS = [RELEVANT_STATES[x] for x in RELEVANT_STATES]
 # with these tags will be closed if no updates within TTL
 TTL = {"changes-requested": 3600, "rfc": 3600}
@@ -77,6 +78,9 @@ class Subject(object):
             if item.subject == self.subject:
                 relevant_series.append(item)
         self._relevant_series = sorted(relevant_series, key=lambda k: k.version)
+        rfcs = sorted((s for s in relevant_series if RFC_TAG in s.tags), key=lambda k: k.version)
+        non_rfcs = sorted((s for s in relevant_series if RFC_TAG not in s.tags), key=lambda k: k.version)
+        self._relevant_series = rfcs + non_rfcs
         return self._relevant_series
 
 
@@ -213,6 +217,8 @@ class Series(object):
         # right now i'm considering that if we wasn't able to find key we want to die
         for key, value in pattern.items():
             if key in ["project", "delegate"]:
+                if key not in diff or not diff[key] or "id" not in diff[key]:
+                    return False
                 if diff[key]["id"] != value:
                     return False
             elif diff[key] != value:
