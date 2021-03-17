@@ -18,6 +18,8 @@ RELEVANT_STATES = {
     "new": 1,
     "rfc": 5,
     "changes-requested": 7,
+    "rejected": 4,
+    "accepted": 3,
 }
 RFC_TAG = "RFC"
 RELEVANT_STATE_IDS = [RELEVANT_STATES[x] for x in RELEVANT_STATES]
@@ -26,14 +28,18 @@ TTL = {"changes-requested": 3600, "rfc": 3600}
 
 # when we don't interested in this patch anymore
 IRRELEVANT_STATES = {
-    "accepted": 3,
-    "rejected": 4,
     "not-applicable": 6,
     "superseded": 9,
     "under-review": 2,
     "awaiting-upstream": 8,
     "deferred": 10,
     "needs-review-ack": 11,
+}
+
+PW_CHECK_STATES = {
+    "success": 1,
+    "warning": 2,
+    "failure": 3,
 }
 
 logging.basicConfig(
@@ -76,7 +82,8 @@ class Subject(object):
             # we using full text search which could give ambigous results
             # so we must filter out irrelevant results
             if item.subject == self.subject:
-                relevant_series.append(item)
+                if item.is_relevant_to_search():
+                    relevant_series.append(item)
         self._relevant_series = sorted(relevant_series, key=lambda k: k.version)
         rfcs = sorted((s for s in relevant_series if RFC_TAG in s.tags), key=lambda k: k.version)
         non_rfcs = sorted((s for s in relevant_series if RFC_TAG not in s.tags), key=lambda k: k.version)
@@ -233,6 +240,10 @@ class Series(object):
                     return True
         return False
 
+    def set_check(self, **kwargs):
+        data = kwargs
+        for diff in self.diffs:
+            self.pw_client.post_check(patch_id=diff["id"], data=data)
 
 class Patchwork(object):
     def __init__(
@@ -242,10 +253,14 @@ class Patchwork(object):
         pw_lookback=7,
         filter_tags=None,
         build_fixtures=False,
+        pw_token=None,
+        pw_user=None
     ):
         self.build_fixtures = build_fixtures
         self.server = url
         self.logger = logging.getLogger(__name__)
+        self.pw_token = pw_token
+        self.pw_user = pw_user
 
         self.since = self.format_since(pw_lookback)
         self.pw_search_patterns = pw_search_patterns
@@ -265,6 +280,53 @@ class Patchwork(object):
         except json.decoder.JSONDecodeError:
             self.logger.debug("Response data", ret.text)
 
+        return ret
+
+    def _post(self, url, data):
+        if not self.pw_token or not self.pw_user:
+            self.logger.warning("Not posting anything as there is no configuration for user and token")
+            return False
+        self.logger.debug(f"Patchwork {self.server} post: {url} with {data}")
+        headers = {"Authorization": f"Token {self.pw_token}"}
+        ret = requests.post(url, data=data, headers=headers)
+        self.logger.debug("Response", ret)
+        try:
+            self.logger.debug("Response data", ret.json())
+        except json.decoder.JSONDecodeError:
+            self.logger.debug("Response data", ret.text)
+        return ret
+
+    def last_check_states(self, patch_id):
+        import pdb; pdb.set_trace()
+
+        checks = self._get(f"patches/{patch_id}/checks/").json()
+        contexts = {}
+        for check in checks:
+            context = check["context"]
+            if context not in contexts or contexts[context]["date"] < check["date"]:
+                contexts[context] = check
+            else:
+                continue
+        import pdb; pdb.set_trace()
+        return contexts
+
+
+    def post_check(self, patch_id, data):
+        context = data["context"]
+        import pdb; pdb.set_trace()
+        if data["state"] not in PW_CHECK_STATES:
+            self.logger.warning(f"Not posting state for {data} as it's pending")
+            return None
+
+        pw_state = PW_CHECK_STATES[data["state"]]
+        data["state"] = pw_state
+        state = pw_state
+
+        if self.last_check_states(patch_id)[context]["state"] != state:
+            self.logger.warning(f"Not posting state for {data} as it's previous posted state")
+            return None
+        url = f"{self.server}/api/1.1/patches/{patch_id}/checks/"
+        ret = self._post(url=url, data=data)
         return ret
 
     def drop_counters(self):
@@ -401,10 +463,10 @@ class Patchwork(object):
         self.known_subjects = {}
 
         for pattern in self.pw_search_patterns:
-            p = {"since": self.since, "state": RELEVANT_STATE_IDS, "archived": False}
+            p = {"since": self.since, "state": RELEVANT_STATE_IDS, "archived": True}
             p.update(pattern)
             self.logger.warning(p)
-            all_patches = self.get_all("patches", filters=p)
+            all_patches = [self.get("patches", 11863443)]
             for patch in all_patches:
                 patch_series = patch["series"]
                 for series in patch_series:

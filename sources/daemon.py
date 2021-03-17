@@ -39,6 +39,8 @@ class PWDaemon(object):
                     pw_url=worker_cfg["pw_url"],
                     pw_search_patterns=worker_cfg["pw_search_patterns"],
                     pw_lookback=worker_cfg.get("pw_lookback", 7),
+                    pw_user=worker_cfg.get("pw_user", None),
+                    pw_token=worker_cfg.get("pw_token", None),
                     master=branch,
                     repo_url=project,
                     github_oauth_token=self.config[project]["github_oauth_token"],

@@ -21,7 +21,9 @@ HEAD_BASE_SEPARATOR = "=>"
 KNOWN_OK_COMMENT_EXCEPTIONS = [
     "Commenting is disabled on issues with more than 2500 comments"
 ]
-
+CI_APP = 67 # (GithubApp(url="/apps/travis-ci", id=67))
+CI_USER = "travis-ci"
+CI_DESCRIPTION = "vmtest"
 
 class GithubSync(object):
     DEFAULT_STAT_VALUES = {
@@ -76,6 +78,8 @@ class GithubSync(object):
         ci_branch=None,
         merge_conflict_label="merge-conflict",
         pw_lookback=7,
+        pw_token=None,
+        pw_user=None,
         filter_tags=None,
         build_fixtures=False,
     ):
@@ -98,6 +102,8 @@ class GithubSync(object):
             pw_lookback=pw_lookback,
             filter_tags=filter_tags,
             build_fixtures=self.build_fixtures,
+            pw_user=pw_user,
+            pw_token=pw_token,
         )
         self.user = self.git.get_user()
         self.user_login = self.user.login
@@ -537,6 +543,21 @@ class GithubSync(object):
     def subject_to_branch(self, subject):
         return f"{subject.branch}{HEAD_BASE_SEPARATOR}{self.master}"
 
+    def sync_checks(self, pr, series):
+        cmt = self.repo.get_commit(pr.head.sha)
+        suites = []
+        for f in cmt.get_check_suites():
+            if f.app.id == CI_APP:
+                suites.append(f)
+        if len(suites) != 1:
+            self.logger.warn("BUG: {len(suites)} suites found, expected exactly 1")
+            return None
+        runs = []
+        for suite in suites:
+            for run in suites[0].get_check_runs():
+                runs.append(run)
+                series.set_check(state=run.conclusion, target_url=run.details_url, context=CI_DESCRIPTION, description=run.name)
+
     def expire_branches(self):
         for branch in self.branches:
             # all bracnhes
@@ -587,7 +608,9 @@ class GithubSync(object):
             branch_name = self.subject_to_branch(subject)
             # series to apply - last known series
             series = subject.latest_series
-            self.checkout_and_patch(branch_name, series)
+            pr = self.checkout_and_patch(branch_name, series)
+            self.sync_checks(pr, series)
+
         # sync old subjects
         subject_names = [x.subject for x in self.subjects]
         for subject_name in self.prs:
@@ -599,6 +622,7 @@ class GithubSync(object):
                 subject = self.pw.get_subject_by_series(series)
                 branch_name = f"{subject.branch}{HEAD_BASE_SEPARATOR}{self.master}"
                 self.checkout_and_patch(branch_name, subject.latest_series)
+                self.sync_checks(pr, subject.latest_series)
         self.expire_branches()
         patches_done = time.time()
         self.stat_update("full_cycle_duration", patches_done - sync_start)
